@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Expense Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💰</text></svg>">
+<style>
+  /* =========================================================
+     CONFIG — the only thing you must edit is APPS_SCRIPT_URL
+     down in the <script> block near the bottom of this file.
+     ========================================================= */
+
+  :root {
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --text: #1a1d29;
+    --text-dim: #6b7280;
+    --border: #e6e8ef;
+    --navy: #1f3864;
+    --blue: #2e5395;
+    --green: #1e7145;
+    --green-bg: #e5f3ea;
+    --red: #c0392b;
+    --red-bg: #fdeceb;
+    --yellow-bg: #fff7e0;
+    --shadow: 0 1px 3px rgba(20,20,40,0.06), 0 1px 2px rgba(20,20,40,0.04);
+    --radius: 16px;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111319; --card: #1b1e27; --text: #eef0f5; --text-dim: #9aa0ae;
+      --border: #2a2e3a; --navy: #7fa6e8; --blue: #7fa6e8; --green: #6fce97;
+      --green-bg: #163524; --red: #ff8a80; --red-bg: #3a1e1c; --yellow-bg: #3a3320;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); height:100%; -webkit-font-smoothing:antialiased; }
+
+  header { position:sticky; top:0; z-index:10; background:var(--navy); color:#fff; padding:calc(14px + env(safe-area-inset-top,0px)) 18px 14px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-size:18px; margin:0; font-weight:700; }
+  header .balance-tag { font-size:13px; background:rgba(255,255,255,0.15); padding:6px 10px; border-radius:10px; font-weight:600; }
+
+  #configBanner { background:#fff3cd; color:#664d03; font-size:12.5px; padding:10px 16px; line-height:1.4; display:none; }
+  #configBanner code { background:rgba(0,0,0,0.08); padding:1px 5px; border-radius:4px; }
+  #statusBanner { font-size:12.5px; padding:8px 16px; display:none; }
+  #statusBanner.error { background:var(--red-bg); color:var(--red); }
+  #statusBanner.loading { background:var(--yellow-bg); color:#7a5b00; }
+
+  main { max-width:520px; margin:0 auto; padding:14px 14px 100px; }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+
+  .card { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--border); padding:16px; margin-bottom:14px; }
+  .card h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-dim); margin:0 0 12px; }
+  label { font-size:13px; color:var(--text-dim); display:block; margin:10px 0 4px; }
+  input, select { width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:15px; font-family:inherit; }
+  .row2 { display:flex; gap:10px; }
+  .row2 > div { flex:1; }
+  button { font-family:inherit; cursor:pointer; }
+  .btn-primary { width:100%; margin-top:16px; padding:13px; background:var(--blue); color:#fff; border:none; border-radius:12px; font-size:15px; font-weight:700; }
+  .btn-primary:disabled { opacity:.6; }
+  .btn-primary:active { opacity:.85; }
+
+  .kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .kpi { border-radius:14px; padding:12px; background:var(--bg); border:1px solid var(--border); }
+  .kpi .label { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.03em; }
+  .kpi .value { font-size:19px; font-weight:800; margin-top:4px; }
+  .kpi.income .value { color:var(--green); }
+  .kpi.expense .value { color:var(--red); }
+  .kpi.balance .value { color:var(--navy); }
+
+  select#dashMonth { margin-bottom:14px; }
+
+  .tx-item { display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--border); gap:10px; }
+  .tx-item:last-child { border-bottom:none; }
+  .tx-left { display:flex; flex-direction:column; min-width:0; }
+  .tx-desc { font-size:14.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tx-meta { font-size:12px; color:var(--text-dim); margin-top:2px; }
+  .tx-right { text-align:right; flex-shrink:0; }
+  .tx-amt { font-weight:700; font-size:14.5px; }
+  .tx-amt.income { color:var(--green); }
+  .tx-amt.expense { color:var(--red); }
+  .tx-bal { font-size:11px; color:var(--text-dim); margin-top:2px; }
+  .tx-del { background:none; border:none; color:var(--text-dim); font-size:18px; padding:4px 6px; line-height:1; }
+
+  .empty { text-align:center; color:var(--text-dim); padding:30px 10px; font-size:14px; }
+
+  .cat-row { margin-bottom:12px; }
+  .cat-row .cat-top { display:flex; justify-content:space-between; font-size:13px; margin-bottom:5px; }
+  .cat-row .cat-top .amt { font-weight:700; }
+  .cat-bar-bg { height:8px; border-radius:6px; background:var(--bg); border:1px solid var(--border); overflow:hidden; }
+  .cat-bar-fill { height:100%; background:var(--blue); border-radius:6px; }
+
+  .trend-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:12px; }
+  .trend-month { width:62px; flex-shrink:0; color:var(--text-dim); }
+  .trend-bars { flex:1; display:flex; flex-direction:column; gap:3px; }
+  .trend-bar-bg { height:7px; border-radius:4px; background:var(--bg); overflow:hidden; }
+  .trend-bar-fill.income { background:var(--green); height:100%; }
+  .trend-bar-fill.expense { background:var(--red); height:100%; }
+
+  nav.tabbar { position:fixed; left:0; right:0; bottom:0; display:flex; background:var(--card); border-top:1px solid var(--border); padding-bottom:env(safe-area-inset-bottom,0px); z-index:10; }
+  nav.tabbar button { flex:1; background:none; border:none; padding:10px 0 8px; color:var(--text-dim); font-size:11px; font-weight:600; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  nav.tabbar button .icon { font-size:19px; }
+  nav.tabbar button.active { color:var(--blue); }
+
+  .toast { position:fixed; bottom:calc(70px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%); background:var(--navy); color:#fff; padding:10px 18px; border-radius:20px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s ease; z-index:20; white-space:nowrap; max-width:88vw; overflow:hidden; text-overflow:ellipsis; }
+  .toast.show { opacity:1; }
+
+  .hint { font-size:12px; color:var(--text-dim); margin-top:10px; line-height:1.4; }
+  .pill-btn { background:var(--yellow-bg); color:var(--navy); border:1px solid var(--border); border-radius:10px; padding:7px 12px; font-size:12px; font-weight:700; }
+  .refresh-btn { background:none; border:1px solid var(--border); color:var(--text-dim); border-radius:10px; padding:6px 10px; font-size:12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💰 Expense Tracker</h1>
+  <div class="balance-tag" id="headerBalance">₹0</div>
+</header>
+
+<div id="configBanner">
+  ⚠️ Not connected yet. Open this file, find <code>APPS_SCRIPT_URL</code> near the bottom of the <code>&lt;script&gt;</code> block, and paste in your deployed Google Apps Script Web App URL (see the README for setup steps).
+</div>
+<div id="statusBanner"></div>
+
+<main>
+
+  <!-- ADD TAB -->
+  <div class="tab-panel active" id="tab-add">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2px;">
+        <h2 style="margin:0;">New Entry</h2>
+        <label for="importFile" class="pill-btn" style="cursor:pointer;">📥 Import Excel</label>
+        <input type="file" id="importFile" accept=".xlsx" style="display:none;">
+      </div>
+      <div class="row2">
+        <div>
+          <label for="f-type">Type</label>
+          <select id="f-type">
+            <option value="Income">Income</option>
+            <option value="Expense" selected>Expense</option>
+          </select>
+        </div>
+        <div>
+          <label for="f-date">Date</label>
+          <input type="date" id="f-date">
+        </div>
+      </div>
+
+      <label for="f-category">Category</label>
+      <select id="f-category"></select>
+
+      <label for="f-desc">Description</label>
+      <input type="text" id="f-desc" placeholder="e.g. September salary">
+
+      <label for="f-amount">Amount (₹)</label>
+      <input type="number" id="f-amount" inputmode="decimal" placeholder="0">
+
+      <label for="f-month">Counts toward month</label>
+      <input type="month" id="f-month">
+      <div class="hint">Auto-filled from the date. Change this if, say, a salary lands on the 30th but should count toward next month's budget.</div>
+
+      <button class="btn-primary" id="addBtn">Add Entry</button>
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS TAB -->
+  <div class="tab-panel" id="tab-tx">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <h2 style="margin:0;">All Transactions</h2>
+        <div style="display:flex; gap:6px;">
+          <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+          <button class="pill-btn" id="exportBtn" style="background:var(--green-bg); color:var(--green); border-color:var(--green);">⬇️ Export</button>
+        </div>
+      </div>
+      <div id="txList"></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD TAB -->
+  <div class="tab-panel" id="tab-dash">
+    <div class="card">
+      <h2>Filter</h2>
+      <select id="dashMonth"></select>
+      <div class="kpi-grid">
+        <div class="kpi income"><div class="label">Income</div><div class="value" id="kpiIncome">₹0</div></div>
+        <div class="kpi expense"><div class="label">Expense</div><div class="value" id="kpiExpense">₹0</div></div>
+        <div class="kpi"><div class="label">Net Savings</div><div class="value" id="kpiNet">₹0</div></div>
+        <div class="kpi balance"><div class="label">Overall Balance</div><div class="value" id="kpiBalance">₹0</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Expense by Category</h2>
+      <div id="catList"></div>
+      <div class="empty" id="catEmpty" style="display:none;">No expenses logged for this period yet.</div>
+    </div>
+
+    <div class="card">
+      <h2>Monthly Trend</h2>
+      <div id="trendList"></div>
+      <div class="empty" id="trendEmpty" style="display:none;">Add a few transactions to see your trend.</div>
+    </div>
+  </div>
+
+</main>
+
+<nav class="tabbar">
+  <button data-tab="add" class="active"><span class="icon">➕</span>Add</button>
+  <button data-tab="tx"><span class="icon">📋</span>Transactions</button>
+  <button data-tab="dash"><span class="icon">📊</span>Dashboard</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // =========================================================================
+  // CONFIG — paste your deployed Google Apps Script Web App URL below.
+  // It looks like: https://script.google.com/macros/s/AKfycb.../exec
+  // See README.md for how to set this up (takes about 5 minutes).
+  // =========================================================================
+  var APPS_SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+  // =========================================================================
+
+  var CONFIGURED = APPS_SCRIPT_URL.indexOf("https://script.google.com") === 0;
+
+  var CATEGORIES = {
+    Income: ["Salary", "Freelance / Other Income", "Investment Return", "Gift / Other Income"],
+    Expense: ["Rent / EMI", "Groceries", "Misc", "Transport / Fuel", "Dining Out",
+               "Entertainment", "Health / Medical", "Shopping", "Education", "Travel/ Vacation",
+               "Insurance", "Investment / Savings", "Other Expense", "House Help", "Electricity",
+               "Broadband and Phone", "Subscriptions", "Cab/Commute", "Swiggy/Zomato/Blinkit/Amazon"]
+  };
+
+  var transactions = [];   // in-memory cache of what's in the Google Sheet
+  var isSyncing = false;
+
+  function fmt(n) {
+    n = Math.round(n);
+    var neg = n < 0;
+    n = Math.abs(n);
+    var s = n.toString().split("").reverse().join("");
+    var out = "";
+    for (var i = 0; i < s.length; i++) {
+      if (i === 3 || (i > 3 && (i - 3) % 2 === 0)) out += ",";
+      out += s[i];
+    }
+    out = out.split("").reverse().join("");
+    return (neg ? "-₹" : "₹") + out;
+  }
+
+  function todayISO() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function monthOf(dateStr) { return dateStr ? dateStr.slice(0, 7) : ""; }
+  function monthLabel(ym) {
+    if (!ym) return "";
+    var parts = ym.split("-");
+    var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return months[parseInt(parts[1], 10) - 1] + " " + parts[0];
+  }
+  function dateLabel(dateStr) {
+    var d = new Date(dateStr + "T00:00:00");
+    var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return String(d.getDate()).padStart(2, "0") + "-" + months[d.getMonth()] + "-" + d.getFullYear();
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function showToast(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(function () { t.classList.remove("show"); }, 2200);
+  }
+
+  function setStatus(kind, msg) {
+    var b = document.getElementById("statusBanner");
+    if (!msg) { b.style.display = "none"; return; }
+    b.className = kind;
+    b.textContent = msg;
+    b.style.display = "block";
+  }
+
+  // ---------- Google Sheet API calls ----------
+  function apiGet() {
+    return fetch(APPS_SCRIPT_URL, { method: "GET" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+  function apiPost(payload) {
+    // text/plain avoids a CORS preflight against Apps Script.
+    return fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+
+  function normalizeRemote(rows) {
+    return (rows || []).map(function (r) {
+      return {
+        id: String(r.ID != null ? r.ID : r.id),
+        date: String(r.Date || r.date || "").slice(0, 10),
+        month: r.Month || r.month || monthOf(String(r.Date || r.date || "").slice(0, 10)),
+        type: (r.Type || r.type) === "Income" ? "Income" : "Expense",
+        category: r.Category || r.category || "Other Expense",
+        desc: r.Description || r.description || "",
+        amount: parseFloat(r.Amount != null ? r.Amount : r.amount) || 0
+      };
+    });
+  }
+
+  function refreshFromSheet(quiet) {
+    if (!CONFIGURED) return Promise.resolve();
+    isSyncing = true;
+    if (!quiet) setStatus("loading", "Loading your data from Google Sheets…");
+    return apiGet().then(function (rows) {
+      transactions = normalizeRemote(rows);
+      setStatus(null);
+      isSyncing = false;
+      renderAll();
+    }).catch(function (err) {
+      isSyncing = false;
+      setStatus("error", "Couldn't load from Google Sheets (" + err.message + "). Check the Web App URL and deployment access.");
+    });
+  }
+
+  // ---------- form setup ----------
+  var elType = document.getElementById("f-type");
+  var elCategory = document.getElementById("f-category");
+  var elDate = document.getElementById("f-date");
+  var elDesc = document.getElementById("f-desc");
+  var elAmount = document.getElementById("f-amount");
+  var elMonth = document.getElementById("f-month");
+
+  function populateCategories() {
+    var list = CATEGORIES[elType.value] || [];
+    elCategory.innerHTML = list.map(function (c) { return '<option value="' + c + '">' + c + "</option>"; }).join("");
+  }
+  elType.addEventListener("change", populateCategories);
+  populateCategories();
+
+  elDate.value = todayISO();
+  elMonth.value = monthOf(elDate.value);
+  elDate.addEventListener("change", function () { elMonth.value = monthOf(elDate.value); });
+
+  var addBtn = document.getElementById("addBtn");
+  addBtn.addEventListener("click", function () {
+    if (!CONFIGURED) { showToast("Connect a Google Sheet first — see the banner above"); return; }
+    var amount = parseFloat(elAmount.value);
+    if (!elDate.value) { showToast("Please pick a date"); return; }
+    if (!amount || amount <= 0) { showToast("Enter a valid amount"); return; }
+    if (!elMonth.value) elMonth.value = monthOf(elDate.value);
+
+    var entry = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      type: elType.value,
+      category: elCategory.value,
+      date: elDate.value,
+      month: elMonth.value,
+      desc: elDesc.value.trim() || elCategory.value,
+      amount: amount
+    };
+
+    addBtn.disabled = true;
+    addBtn.textContent = "Saving…";
+    apiPost({ action: "add", transaction: entry }).then(function (res) {
+      if (res && res.status === "error") throw new Error(res.message || "Save failed");
+      transactions.push(entry);
+      elDesc.value = "";
+      elAmount.value = "";
+      showToast("Saved to Google Sheet");
+      renderAll();
+    }).catch(function (err) {
+      showToast("Couldn't save: " + err.message);
+    }).finally(function () {
+      addBtn.disabled = false;
+      addBtn.textContent = "Add Entry";
+    });
+  });
+
+  // ---------- tabs ----------
+  var panels = document.querySelectorAll(".tab-panel");
+  var tabButtons = document.querySelectorAll("nav.tabbar button");
+  tabButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      tabButtons.forEach(function (b) { b.classList.remove("active"); });
+      panels.forEach(function (p) { p.classList.remove("active"); });
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+      if (btn.dataset.tab === "dash") renderDashboard();
+      if (btn.dataset.tab === "tx") renderTransactions();
+    });
+  });
+
+  document.getElementById("refreshBtn").addEventListener("click", function () { refreshFromSheet(false); });
+
+  // ---------- computed data ----------
+  function sortedWithBalance() {
+    var sorted = transactions.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return a.id < b.id ? -1 : 1;
+    });
+    var bal = 0, byId = {};
+    sorted.forEach(function (t) {
+      bal += (t.type === "Income" ? t.amount : -t.amount);
+      byId[t.id] = bal;
+    });
+    return { byId: byId, overall: bal };
+  }
+
+  function renderHeader() {
+    document.getElementById("headerBalance").textContent = fmt(sortedWithBalance().overall);
+  }
+
+  // ---------- transactions list ----------
+  function renderTransactions() {
+    var res = sortedWithBalance();
+    var list = transactions.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date > b.date ? -1 : 1;
+      return a.id > b.id ? -1 : 1;
+    });
+    var el = document.getElementById("txList");
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">' + (CONFIGURED ? "No transactions yet. Add your first one from the Add tab." : "Connect a Google Sheet to get started.") + '</div>';
+      return;
+    }
+    el.innerHTML = list.map(function (t) {
+      var sign = t.type === "Income" ? "+" : "-";
+      var cls = t.type === "Income" ? "income" : "expense";
+      return '<div class="tx-item">' +
+        '<div class="tx-left">' +
+          '<div class="tx-desc">' + escapeHtml(t.desc) + '</div>' +
+          '<div class="tx-meta">' + dateLabel(t.date) + ' · ' + escapeHtml(t.category) + '</div>' +
+        '</div>' +
+        '<div class="tx-right">' +
+          '<div class="tx-amt ' + cls + '">' + sign + fmt(t.amount) + '</div>' +
+          '<div class="tx-bal">Bal ' + fmt(res.byId[t.id]) + '</div>' +
+        '</div>' +
+        '<button class="tx-del" data-id="' + t.id + '" title="Delete">✕</button>' +
+      '</div>';
+    }).join("");
+
+    el.querySelectorAll(".tx-del").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.id;
+        btn.disabled = true;
+        apiPost({ action: "delete", id: id }).then(function () {
+          transactions = transactions.filter(function (t) { return t.id !== id; });
+          showToast("Deleted");
+          renderAll();
+        }).catch(function (err) {
+          showToast("Couldn't delete: " + err.message);
+          btn.disabled = false;
+        });
+      });
+    });
+  }
+
+  // ---------- dashboard ----------
+  function uniqueMonths() {
+    var set = {};
+    transactions.forEach(function (t) { if (t.month) set[t.month] = true; });
+    return Object.keys(set).sort();
+  }
+
+  function populateDashMonths() {
+    var sel = document.getElementById("dashMonth");
+    var prev = sel.value || "All";
+    var months = uniqueMonths();
+    var opts = ['<option value="All">All months</option>'].concat(
+      months.map(function (m) { return '<option value="' + m + '">' + monthLabel(m) + "</option>"; })
+    );
+    sel.innerHTML = opts.join("");
+    sel.value = months.indexOf(prev) !== -1 || prev === "All" ? prev : "All";
+  }
+  document.getElementById("dashMonth").addEventListener("change", renderDashboard);
+
+  function renderDashboard() {
+    populateDashMonths();
+    var filterMonth = document.getElementById("dashMonth").value;
+    var filtered = transactions.filter(function (t) { return filterMonth === "All" || t.month === filterMonth; });
+
+    var income = 0, expense = 0, catTotals = {};
+    filtered.forEach(function (t) {
+      if (t.type === "Income") income += t.amount;
+      else { expense += t.amount; catTotals[t.category] = (catTotals[t.category] || 0) + t.amount; }
+    });
+
+    document.getElementById("kpiIncome").textContent = fmt(income);
+    document.getElementById("kpiExpense").textContent = fmt(expense);
+    document.getElementById("kpiNet").textContent = fmt(income - expense);
+    document.getElementById("kpiBalance").textContent = fmt(sortedWithBalance().overall);
+
+    var catEl = document.getElementById("catList");
+    var catKeys = Object.keys(catTotals).sort(function (a, b) { return catTotals[b] - catTotals[a]; });
+    var maxCat = catKeys.length ? catTotals[catKeys[0]] : 0;
+    document.getElementById("catEmpty").style.display = catKeys.length ? "none" : "block";
+    catEl.innerHTML = catKeys.map(function (c) {
+      var pct = maxCat ? Math.round((catTotals[c] / maxCat) * 100) : 0;
+      return '<div class="cat-row">' +
+        '<div class="cat-top"><span>' + escapeHtml(c) + '</span><span class="amt">' + fmt(catTotals[c]) + '</span></div>' +
+        '<div class="cat-bar-bg"><div class="cat-bar-fill" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+    }).join("");
+
+    var months = uniqueMonths();
+    var recent = months.slice(-6);
+    var trendEl = document.getElementById("trendList");
+    document.getElementById("trendEmpty").style.display = recent.length ? "none" : "block";
+    var maxVal = 0;
+    var perMonth = recent.map(function (m) {
+      var inc = 0, exp = 0;
+      transactions.forEach(function (t) {
+        if (t.month !== m) return;
+        if (t.type === "Income") inc += t.amount; else exp += t.amount;
+      });
+      maxVal = Math.max(maxVal, inc, exp);
+      return { m: m, inc: inc, exp: exp };
+    });
+    trendEl.innerHTML = perMonth.map(function (row) {
+      var incPct = maxVal ? Math.round((row.inc / maxVal) * 100) : 0;
+      var expPct = maxVal ? Math.round((row.exp / maxVal) * 100) : 0;
+      return '<div class="trend-row">' +
+        '<div class="trend-month">' + monthLabel(row.m) + '</div>' +
+        '<div class="trend-bars">' +
+          '<div class="trend-bar-bg"><div class="trend-bar-fill income" style="width:' + incPct + '%"></div></div>' +
+          '<div class="trend-bar-bg"><div class="trend-bar-fill expense" style="width:' + expPct + '%"></div></div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderTransactions();
+    renderDashboard();
+  }
+
+  // ---------- Export to Excel (plain browser download — no special capability needed here) ----------
+  document.getElementById("exportBtn").addEventListener("click", function () {
+    if (!transactions.length) { showToast("No transactions to export yet"); return; }
+    if (typeof XLSX === "undefined") { showToast("Export library didn't load — check your connection"); return; }
+    var res = sortedWithBalance();
+    var sorted = transactions.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return a.id < b.id ? -1 : 1;
+    });
+    var rows = [["Date", "Month", "Type", "Category", "Description", "Amount (₹)", "Running Balance (₹)"]];
+    sorted.forEach(function (t) {
+      rows.push([dateLabel(t.date), monthLabel(t.month), t.type, t.category, t.desc, t.amount, res.byId[t.id]]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [{ wch: 13 }, { wch: 11 }, { wch: 10 }, { wch: 24 }, { wch: 34 }, { wch: 14 }, { wch: 18 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Transactions");
+    XLSX.writeFile(wb, "Expense-Tracker-Export.xlsx");
+    showToast("Downloaded");
+  });
+
+  // ---------- Import from Excel → bulk-writes into the Google Sheet ----------
+  function parseMonthLabel(label) {
+    var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var parts = String(label).split("-");
+    if (parts.length !== 2) return null;
+    var idx = months.indexOf(parts[0]);
+    if (idx === -1) return null;
+    return parts[1] + "-" + String(idx + 1).padStart(2, "0");
+  }
+
+  document.getElementById("importFile").addEventListener("change", function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    if (!CONFIGURED) { showToast("Connect a Google Sheet first"); e.target.value = ""; return; }
+    if (typeof XLSX === "undefined") { showToast("Import library didn't load"); e.target.value = ""; return; }
+
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = new Uint8Array(ev.target.result);
+        var book = XLSX.read(data, { type: "array", cellDates: true });
+
+        if (book.SheetNames.indexOf("Lists") !== -1) {
+          var lsRows = XLSX.utils.sheet_to_json(book.Sheets["Lists"], { header: 1, blankrows: false });
+          var allCats = [];
+          for (var i = 1; i < lsRows.length; i++) {
+            var v = lsRows[i] && lsRows[i][1];
+            if (v) allCats.push(String(v).trim());
+          }
+          if (allCats.length) {
+            var incomeGuess = allCats.filter(function (c) { return /salary|income|freelance|gift/i.test(c); });
+            var expenseGuess = allCats.filter(function (c) { return incomeGuess.indexOf(c) === -1; });
+            if (incomeGuess.length) CATEGORIES.Income = incomeGuess;
+            if (expenseGuess.length) CATEGORIES.Expense = expenseGuess;
+            populateCategories();
+          }
+        }
+
+        var sheetName = book.SheetNames.indexOf("Transactions") !== -1 ? "Transactions" : book.SheetNames[0];
+        var rows = XLSX.utils.sheet_to_json(book.Sheets[sheetName], { header: 1, raw: true, defval: null });
+
+        var headerIdx = -1, header = [];
+        for (var r = 0; r < rows.length; r++) {
+          var rowVals = (rows[r] || []).map(function (v) { return (v || "").toString(); });
+          if (rowVals.indexOf("Date") !== -1 && rowVals.some(function (v) { return v.indexOf("Amount") !== -1; })) {
+            headerIdx = r; header = rowVals; break;
+          }
+        }
+        if (headerIdx === -1) { showToast("Couldn't find a Transactions table in that file"); e.target.value = ""; return; }
+
+        var idxDate = header.indexOf("Date");
+        var idxMonth = header.indexOf("Month");
+        var idxType = header.indexOf("Type");
+        var idxCategory = header.indexOf("Category");
+        var idxDesc = header.indexOf("Description");
+        var idxAmount = -1;
+        for (var h = 0; h < header.length; h++) { if (header[h].indexOf("Amount") !== -1) { idxAmount = h; break; } }
+
+        var imported = [];
+        for (var r2 = headerIdx + 1; r2 < rows.length; r2++) {
+          var row = rows[r2];
+          if (!row || row[idxDate] == null || row[idxType] == null || row[idxAmount] == null) continue;
+          var dateVal = row[idxDate];
+          var dateStr = null;
+          if (dateVal instanceof Date) {
+            dateStr = dateVal.getFullYear() + "-" + String(dateVal.getMonth() + 1).padStart(2, "0") + "-" + String(dateVal.getDate()).padStart(2, "0");
+          } else if (typeof dateVal === "string") {
+            var d2 = new Date(dateVal);
+            if (!isNaN(d2)) dateStr = d2.getFullYear() + "-" + String(d2.getMonth() + 1).padStart(2, "0") + "-" + String(d2.getDate()).padStart(2, "0");
+          }
+          if (!dateStr) continue;
+          var monthRaw = idxMonth !== -1 ? row[idxMonth] : null;
+          var ym = monthRaw ? parseMonthLabel(monthRaw) : null;
+          imported.push({
+            id: "imp" + r2 + Date.now().toString(36),
+            type: row[idxType] === "Income" ? "Income" : "Expense",
+            category: idxCategory !== -1 && row[idxCategory] ? String(row[idxCategory]) : "Other Expense",
+            date: dateStr,
+            month: ym || monthOf(dateStr),
+            desc: idxDesc !== -1 && row[idxDesc] ? String(row[idxDesc]) : "Entry",
+            amount: parseFloat(row[idxAmount]) || 0
+          });
+        }
+
+        if (!imported.length) { showToast("No transactions found to import"); e.target.value = ""; return; }
+        if (!confirm("Import " + imported.length + " transaction(s)? This replaces everything currently in your Google Sheet.")) { e.target.value = ""; return; }
+
+        setStatus("loading", "Writing " + imported.length + " rows to your Google Sheet…");
+        apiPost({ action: "bulkReplace", transactions: imported }).then(function (res) {
+          if (res && res.status === "error") throw new Error(res.message || "Import failed");
+          transactions = imported;
+          setStatus(null);
+          showToast("Imported " + imported.length + " entries");
+          renderAll();
+        }).catch(function (err) {
+          setStatus("error", "Import failed: " + err.message);
+        });
+      } catch (err) {
+        showToast("Couldn't read that file");
+      }
+      e.target.value = "";
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  // ---------- boot ----------
+  if (!CONFIGURED) {
+    document.getElementById("configBanner").style.display = "block";
+    renderAll();
+  } else {
+    refreshFromSheet(false);
+  }
+})();
+</script>
+
+</body>
+</html>
